@@ -1,5 +1,6 @@
 package com.coloryr.allmusic.lyrics;
 
+import com.coloryr.allmusic.lyrics.config.LyricsConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -40,10 +41,7 @@ public final class LyricsDisplay {
     private static volatile String lastParseMsg;
     private static volatile String lastPlayMsg;
 
-    // 渲染常量
-    private static final int COLOR_TEXT = 0xFF_FFFFFF;
-    private static final int COLOR_BG   = 0x80_000000;
-    private static final int MAX_WIDTH  = 380;
+    // 渲染常量（可通过 Mod Menu 配置）
 
     private static final Pattern PARSING_ID  = Pattern.compile("正在解析歌曲[：:]?\\s*(\\d+)");
     private static final Pattern NOW_PLAYING = Pattern.compile("正在播放[：:]\\s*(.+?)(?:\\s+by:.*)?$");
@@ -169,6 +167,8 @@ public final class LyricsDisplay {
     // ==================================================================
 
     public static void render(GuiGraphicsExtractor ctx) {
+        LyricsConfig cfg = LyricsConfig.get();
+        if (!cfg.showLyrics) return;
         if (!active || lines == null || lines.isEmpty()) return;
 
         Minecraft mc = Minecraft.getInstance();
@@ -183,14 +183,14 @@ public final class LyricsDisplay {
         String curr = cur >= 0 ? lines.get(cur).text() : "";
 
         int boxH = font.lineHeight + 16;
-        int boxW = Math.min(sw - 40, MAX_WIDTH);
+        int boxW = Math.min(sw - 40, cfg.maxWidth);
         int boxX = (sw - boxW) / 2;
-        int boxY = sh - 72 - boxH;
+        int boxY = sh - cfg.bottomOffset - boxH;
 
-        ctx.fill(boxX - 4, boxY - 4, boxX + boxW + 4, boxY + boxH + 4, COLOR_BG);
+        ctx.fill(boxX - 4, boxY - 4, boxX + boxW + 4, boxY + boxH + 4, cfg.bgColor);
 
         if (!curr.isEmpty())
-            drawCentered(ctx, font, curr, sw / 2, boxY + 8, COLOR_TEXT, boxW - 20);
+            drawCentered(ctx, font, curr, sw / 2, boxY + 8, cfg.textColor, boxW - 20);
 
         if (!songDisplayName.isEmpty()) {
             String sn = font.plainSubstrByWidth(songDisplayName, boxW - 20);

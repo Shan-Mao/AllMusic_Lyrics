@@ -14,6 +14,9 @@
   "entrypoints": {
     "client": [
       "com.coloryr.allmusic.lyrics.AllMusicLyrics"
+    ],
+    "modmenu": [
+      "com.coloryr.allmusic.lyrics.config.ModMenuIntegration"
     ]
   },
   "mixins": [
@@ -28,5 +31,8 @@
     "java": ">=25",
     "fabric-api": "*",
     "allmusic_client": ">=3.7.4"
+  },
+  "suggests": {
+    "modmenu": "*"
   }
 }

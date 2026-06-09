@@ -15,7 +15,10 @@ repositories {
         name = 'Fabric'
         url = 'https://maven.fabricmc.net/'
     }
-}
+    maven {
+        name = 'Terraformers'
+        url = 'https://maven.terraformersmc.com/releases/'
+    }}
 
 dependencies {
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
@@ -31,6 +34,9 @@ dependencies {
     implementation files('../[fabric-26.1]AllMusic_Client-3.7.4/META-INF/jars/httpclient5-5.6.jar')
     implementation files('../[fabric-26.1]AllMusic_Client-3.7.4/META-INF/jars/httpcore5-5.4.jar')
     implementation files('../[fabric-26.1]AllMusic_Client-3.7.4/META-INF/jars/httpcore5-h2-5.4.jar')
+
+    // Mod Menu（可选配置界面）
+    compileOnly "com.terraformersmc:modmenu:18.0.0-beta.1"
 }
 
 processResources {
