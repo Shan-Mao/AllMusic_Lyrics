@@ -178,6 +178,7 @@ public final class LyricsDisplay {
 
         int sw = mc.getWindow().getGuiScaledWidth();
         int sh = mc.getWindow().getGuiScaledHeight();
+        long nowMs = System.currentTimeMillis();
 
         int cur = LyricsParser.currentIndex(lines, currentMs);
         String curr = cur >= 0 ? lines.get(cur).text() : "";
@@ -189,13 +190,20 @@ public final class LyricsDisplay {
 
         ctx.fill(boxX - 4, boxY - 4, boxX + boxW + 4, boxY + boxH + 4, cfg.bgColor);
 
-        if (!curr.isEmpty())
-            drawCentered(ctx, font, curr, sw / 2, boxY + 8, cfg.textColor, boxW - 20);
+        if (!curr.isEmpty()) {
+            int color = cfg.rgbMode
+                    ? LyricsConfig.rgbColor(nowMs, cfg.rgbSpeed)
+                    : cfg.textColor;
+            drawCentered(ctx, font, curr, sw / 2, boxY + 8, color, boxW - 20);
+        }
 
         if (!songDisplayName.isEmpty()) {
+            int titleClr = cfg.titleRgbMode
+                    ? LyricsConfig.rgbColor(nowMs, cfg.titleRgbSpeed)
+                    : cfg.titleColor;
             String sn = font.plainSubstrByWidth(songDisplayName, boxW - 20);
             ctx.text(font, sn, sw / 2 - font.width(sn) / 2,
-                    boxY - font.lineHeight - 4, 0xFF_CCCCCC, false);
+                    boxY - font.lineHeight - 4, titleClr, false);
         }
     }
 

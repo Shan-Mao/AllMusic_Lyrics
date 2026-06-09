@@ -17,22 +17,46 @@ public class LyricsConfig {
     private static final File FILE = FabricLoader.getInstance().getConfigDir()
             .resolve("allmusic_lyrics.json").toFile();
 
-    // ---- 配置项 ----
+    // ---- 歌词显示 ----
 
-    /** 是否显示歌词 HUD */
     public boolean showLyrics = true;
-
-    /** 文字颜色 (ARGB) */
-    public int textColor = 0xFF_FFFFFF;
-
-    /** 背景颜色 (ARGB) */
+    public int maxWidth = 380;
+    public int bottomOffset = 72;
     public int bgColor = 0x80_000000;
 
-    /** 歌词框最大宽度 */
-    public int maxWidth = 380;
+    // ---- 歌词文字颜色 ----
 
-    /** 歌词框距屏幕底部距离 */
-    public int bottomOffset = 72;
+    /** 是否启用 RGB 模式（覆盖 textColor） */
+    public boolean rgbMode = true;
+
+    /** RGB 颜色切换间隔（秒） */
+    public int rgbSpeed = 2;
+
+    /** 歌词文字颜色 (ARGB)，rgbMode=false 时使用 */
+    public int textColor = 0xFF_FFFFFF;
+
+    // ---- 歌名颜色 ----
+
+    /** 是否启用歌名 RGB 模式 */
+    public boolean titleRgbMode = false;
+
+    /** 歌名 RGB 切换间隔（秒） */
+    public int titleRgbSpeed = 3;
+
+    /** 歌名颜色 (ARGB)，titleRgbMode=false 时使用 */
+    public int titleColor = 0xFF_CCCCCC;
+
+    // ---- RGB 预设色板 ----
+
+    public static final int[] RGB_PRESETS = {
+            0xFF_FF5555, // 红
+            0xFF_FFAA00, // 橙
+            0xFF_FFFF55, // 黄
+            0xFF_55FF55, // 绿
+            0xFF_55FFFF, // 青
+            0xFF_5555FF, // 蓝
+            0xFF_FF55FF, // 紫
+    };
 
     // ---- 单例 ----
 
@@ -60,5 +84,11 @@ public class LyricsConfig {
         try (Writer w = new OutputStreamWriter(new FileOutputStream(FILE), StandardCharsets.UTF_8)) {
             GSON.toJson(instance, w);
         } catch (Exception ignored) {}
+    }
+
+    /** 根据当前时间计算 RGB 循环颜色 */
+    public static int rgbColor(long nowMs, int speedSec) {
+        int idx = (int) ((nowMs / (speedSec * 1000L)) % RGB_PRESETS.length);
+        return RGB_PRESETS[idx];
     }
 }
