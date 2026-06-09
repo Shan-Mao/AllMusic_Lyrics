@@ -1,0 +1,16 @@
+{
+  "required": true,
+  "package": "com.coloryr.allmusic.lyrics.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "AllMusicCoreMixin",
+    "MinecraftMixin",
+    "GuiLyricsMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
+  }
+}

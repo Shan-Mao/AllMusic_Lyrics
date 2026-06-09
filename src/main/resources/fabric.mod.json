@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "allmusic_lyrics",
+  "version": "${version}",
+  "name": "AllMusic Lyrics",
+  "description": "AllMusic Client 歌词附属模组。自动获取网易云/LRCLIB同步歌词并显示在HUD上。下方源码为前置模组源码",
+  "authors": ["shanmao", "Color_yr", "Claude"],
+  "contact": {
+    "homepage": "https://modrinth.com/project/allmusic_lyrics",
+    "sources": "https://github.com/Coloryr/AllMusic_Client/"
+  },
+  "license": "GPL-3.0",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.coloryr.allmusic.lyrics.AllMusicLyrics"
+    ]
+  },
+  "mixins": [
+    {
+      "config": "allmusic_lyrics.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=0.18.3",
+    "minecraft": "~26.1-",
+    "java": ">=25",
+    "fabric-api": "*",
+    "allmusic_client": ">=3.7.4"
+  }
+}

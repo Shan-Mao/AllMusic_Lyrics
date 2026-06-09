@@ -1,0 +1,63 @@
+plugins {
+    id 'net.fabricmc.fabric-loom' version '1.17.3'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+    archivesName = project.archives_base_name
+}
+
+repositories {
+    mavenCentral()
+    maven {
+        name = 'Fabric'
+        url = 'https://maven.fabricmc.net/'
+    }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    // Minecraft 26.1+ 无需 mappings — 官方已无混淆
+
+    implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+
+    // AllMusic Client 依赖（本地文件）
+    implementation files('../[fabric-26.1]AllMusic_Client-3.7.4')
+
+    // AllMusic Client 内嵌的库
+    implementation files('../[fabric-26.1]AllMusic_Client-3.7.4/META-INF/jars/httpclient5-5.6.jar')
+    implementation files('../[fabric-26.1]AllMusic_Client-3.7.4/META-INF/jars/httpcore5-5.4.jar')
+    implementation files('../[fabric-26.1]AllMusic_Client-3.7.4/META-INF/jars/httpcore5-h2-5.4.jar')
+}
+
+processResources {
+    inputs.property "version", project.version
+    filteringCharset "UTF-8"
+
+    filesMatching("fabric.mod.json") {
+        expand "version": project.version
+    }
+}
+
+def targetJavaVersion = 25
+tasks.withType(JavaCompile).configureEach {
+    it.options.encoding = "UTF-8"
+    it.options.release.set(targetJavaVersion)
+}
+
+java {
+    def javaVersion = JavaVersion.toVersion(targetJavaVersion)
+    if (JavaVersion.current() < javaVersion) {
+        toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
+    }
+    withSourcesJar()
+}
+
+jar {
+    from("LICENSE") {
+        rename { "${it}_${project.base.archivesName.get()}" }
+    }
+}
