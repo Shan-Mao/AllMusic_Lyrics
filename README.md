@@ -9,7 +9,7 @@
 
 | 作者 | 主页 |
 |------|------|
-| **shanmao** | https://modrinth.com/user/shanmao |
+| **shanmao** | https://modrinth.com/user/B_shanmao |
 | Color_yr | AllMusic Client 前置 |
 | Claude | 开发协助 |
 
