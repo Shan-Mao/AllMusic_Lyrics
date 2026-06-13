@@ -75,51 +75,105 @@ public final class PlaylistFetcher {
     }
 
     /**
-     * 通过歌单ID获取所有歌曲的网易云链接。
+     * 分页获取歌单全部歌曲链接。
+     * 先用 topTrackIds（全量ID），回退到分页 tracks。
      */
     private static CompletableFuture<List<String>> fetchPlaylist(long playlistId) {
         return CompletableFuture.supplyAsync(() -> {
             LOG.info("获取歌单 ID={}", playlistId);
             try {
-                String url = "https://music.163.com/api/playlist/detail?id=" + playlistId;
-                HttpGet req = new HttpGet(url);
-                req.setHeader("User-Agent",
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-                req.setHeader("Referer", "https://music.163.com/");
+            List<String> allUrls = new ArrayList<>();
+            cachedPlaylistName = "";
 
-                try (CloseableHttpResponse resp = http.execute(req)) {
-                    if (resp.getCode() != 200) {
-                        LOG.warn("歌单API返回 {}", resp.getCode());
-                        return null;
-                    }
-                    String json = EntityUtils.toString(resp.getEntity(), StandardCharsets.UTF_8);
-                    JsonObject root = JsonParser.parseString(json).getAsJsonObject();
+            String json = httpGet("https://music.163.com/api/playlist/detail?id=" + playlistId);
+            if (json == null) return null;
 
-                    if (root.get("code").getAsInt() != 200) {
-                        LOG.warn("歌单API code != 200");
-                        return null;
-                    }
+            JsonObject root = JsonParser.parseString(json).getAsJsonObject();
+            if (root.get("code").getAsInt() != 200) {
+                LOG.warn("API code={}", root.get("code").getAsInt());
+                return null;
+            }
 
-                    JsonObject result = root.getAsJsonObject("result");
-                    cachedPlaylistName = result.get("name").getAsString();
-                    JsonArray tracks = result.getAsJsonArray("tracks");
+            JsonObject result = root.getAsJsonObject("result");
+            if (result == null) return null;
+            cachedPlaylistName = result.has("name") ? result.get("name").getAsString() : "歌单";
 
-                    List<String> urls = new ArrayList<>();
-                    for (int i = 0; i < tracks.size(); i++) {
-                        JsonObject track = tracks.get(i).getAsJsonObject();
-                        long songId = track.get("id").getAsLong();
-                        urls.add("https://music.163.com/song?id=" + songId);
-                    }
+            // 优先 topTrackIds（通常包含全量ID），注意值可能是 null
+            JsonArray ids = getJsonArrayOrNull(result, "topTrackIds");
+            if (ids == null) ids = getJsonArrayOrNull(result, "trackIds");
 
-                    LOG.info("歌单「{}」共 {} 首", cachedPlaylistName, urls.size());
-                    cachedSongUrls = urls;
-                    return urls;
+            LOG.info("topTrackIds={}, trackIds={}, tracks={}",
+                    getJsonArrayOrNull(result, "topTrackIds") != null,
+                    getJsonArrayOrNull(result, "trackIds") != null,
+                    getJsonArrayOrNull(result, "tracks") != null ?
+                            getJsonArrayOrNull(result, "tracks").size() : 0);
+
+            int trackCount = result.has("trackCount")
+                    ? result.get("trackCount").getAsInt() : 0;
+            LOG.info("trackCount={}", trackCount);
+
+            if (ids != null && ids.size() > 0) {
+                for (int i = 0; i < ids.size(); i++)
+                    allUrls.add("https://music.163.com/song?id=" +
+                            ids.get(i).getAsJsonObject().get("id").getAsLong());
+            } else {
+                // tracks 回退 + 翻页（trackCount=0 则只取首页）
+                int offset = 0;
+                int target = trackCount > 0 ? trackCount : Integer.MAX_VALUE;
+                while (allUrls.size() < target) {
+                    String pageJson = offset == 0 ? json
+                            : httpGet("https://music.163.com/api/playlist/detail?id=" +
+                                    playlistId + "&offset=" + offset + "&limit=100");
+                    if (pageJson == null) break;
+
+                    JsonObject pageRoot = JsonParser.parseString(pageJson).getAsJsonObject();
+                    if (pageRoot.get("code").getAsInt() != 200) break;
+
+                    JsonObject pageResult = pageRoot.getAsJsonObject("result");
+                    JsonArray tracks = getJsonArrayOrNull(pageResult, "tracks");
+                    if (tracks == null || tracks.isEmpty()) break;
+
+                    for (int i = 0; i < tracks.size(); i++)
+                        allUrls.add("https://music.163.com/song?id=" +
+                                tracks.get(i).getAsJsonObject().get("id").getAsLong());
+                    offset += tracks.size();
+                    if (tracks.size() < 100) break; // 最后一页
                 }
+            }
+
+            LOG.info("歌单「{}」共 {} 首", cachedPlaylistName, allUrls.size());
+            cachedSongUrls = allUrls;
+            return allUrls;
             } catch (Exception e) {
-                LOG.error("获取歌单失败: {}", e.toString());
+                LOG.error("解析歌单失败: {}", e.toString());
                 return null;
             }
         }, POOL);
+    }
+
+    private static JsonArray getJsonArrayOrNull(JsonObject obj, String key) {
+        if (!obj.has(key)) return null;
+        var el = obj.get(key);
+        return el.isJsonNull() ? null : el.getAsJsonArray();
+    }
+
+    private static String httpGet(String url) {
+        try {
+            LOG.info("HTTP GET: {}", url.substring(0, Math.min(60, url.length())));
+            HttpGet req = new HttpGet(url);
+            req.setHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+            req.setHeader("Referer", "https://music.163.com/");
+            req.setHeader("Cookie", "os=pc; osver=Microsoft-Windows-10; appver=2.9.7; channel=netease; WEVNSM=1.0.0; WNMCID=zlpxumx.bf5n.4h22.bo3f.92agr.5da27");
+            try (CloseableHttpResponse resp = http.execute(req)) {
+                int code = resp.getCode();
+                LOG.info("HTTP response: {}", code);
+                if (code == 429) { Thread.sleep(3000); return httpGet(url); }
+                if (code != 200) { LOG.warn("HTTP {} {}", code, url.substring(0, 50)); return null; }
+                String body = EntityUtils.toString(resp.getEntity(), StandardCharsets.UTF_8);
+                LOG.info("HTTP body length: {}", body.length());
+                return body;
+            }
+        } catch (Exception e) { LOG.error("HTTP error: {}", e.toString()); return null; }
     }
 
     private static final java.util.concurrent.ScheduledExecutorService SENDER =

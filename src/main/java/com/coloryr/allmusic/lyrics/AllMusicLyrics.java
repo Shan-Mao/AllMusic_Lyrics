@@ -35,7 +35,9 @@ public class AllMusicLyrics implements ClientModInitializer {
                     .then(RequiredArgumentBuilder.<FabricClientCommandSource, String>argument("url", greedyString())
                             .executes(cmd -> {
                                 String url = cmd.getArgument("url", String.class);
-                                PlaylistFetcher.fetchFromMessage(url).thenAccept(songs -> {
+                                PlaylistFetcher.fetchFromMessage(url)
+                                        .exceptionally(ex -> { LOGGER.error("歌单异常: {}", ex.toString()); return null; })
+                                        .thenAccept(songs -> {
                                     if (songs != null && !songs.isEmpty()) {
                                         int count = LyricsConfig.get().playlistSendCount;
                                         PlaylistFetcher.sendSongs(count);

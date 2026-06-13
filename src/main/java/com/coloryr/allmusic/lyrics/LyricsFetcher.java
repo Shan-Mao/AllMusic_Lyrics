@@ -266,6 +266,7 @@ public final class LyricsFetcher {
             req.setHeader("User-Agent",
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
             req.setHeader("Referer", "https://music.163.com/");
+            req.setHeader("Cookie", "os=pc; osver=Microsoft-Windows-10; appver=2.9.7");
 
             try (CloseableHttpResponse resp = http.execute(req)) {
                 if (resp.getCode() == 429) {
