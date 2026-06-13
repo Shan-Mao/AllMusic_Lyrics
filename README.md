@@ -1,6 +1,6 @@
 # AllMusic Lyrics
 
-<div align="right"><sub>[更新日志 →](更新日志.md)</sub></div>
+<p align="right"><a href="更新日志.md"><sub>更新日志 →</sub></a></p>
 
 [![Modrinth](https://img.shields.io/badge/Modrinth-allmusic__lyrics-00AF5C?logo=modrinth)](https://modrinth.com/project/allmusic_lyrics)
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue?logo=gnu)](LICENSE)
