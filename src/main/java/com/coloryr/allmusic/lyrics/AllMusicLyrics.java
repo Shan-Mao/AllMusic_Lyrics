@@ -1,6 +1,7 @@
 package com.coloryr.allmusic.lyrics;
 
 import com.coloryr.allmusic.lyrics.config.LyricsConfig;
+import com.coloryr.allmusic.lyrics.config.keybind.OpenConfigKey;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import net.fabricmc.api.ClientModInitializer;
@@ -27,6 +28,10 @@ public class AllMusicLyrics implements ClientModInitializer {
 
         LyricsFetcher.init();
         PlaylistFetcher.init();
+
+        // 注册快捷键（默认 Alt+L），在「设置→按键控制」可自定义
+        net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.END_CLIENT_TICK
+                .register(client -> OpenConfigKey.tick());
 
         // 注册 /musiclist 命令
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, ctx) -> {
