@@ -1,8 +1,8 @@
 # AllMusic Lyrics
 
 [![Modrinth](https://img.shields.io/badge/Modrinth-allmusic__lyrics-00AF5C?logo=modrinth)](https://modrinth.com/project/allmusic_lyrics)
-[![License](https://img.shields.io/badge/License-GPL--3.0-blue)](LICENSE)
-[![Bilibili](https://img.shields.io/badge/Bilibili-543353261-FB7299?logo=bilibili)](https://space.bilibili.com/543353261)
+[![License](https://img.shields.io/badge/License-GPL--3.0-blue?logo=gnu)](LICENSE)
+[![Bilibili](https://img.shields.io/badge/Bilibili-shanmao-FB7299?logo=bilibili)](https://space.bilibili.com/543353261)
 
 **AllMusic Client 歌词附属模组** — 自动获取网易云 / LRCLIB 同步歌词并显示在游戏 HUD 上。
 
