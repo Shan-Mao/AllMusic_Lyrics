@@ -46,6 +46,11 @@ public class LyricsConfig {
     /** 歌名颜色 (ARGB)，titleRgbMode=false 时使用 */
     public int titleColor = 0xFF_CCCCCC;
 
+    // ---- 歌单设置 ----
+
+    /** 每次发送的歌曲数量 */
+    public int playlistSendCount = 5;
+
     // ---- RGB 预设色板 ----
 
     public static final int[] RGB_PRESETS = {

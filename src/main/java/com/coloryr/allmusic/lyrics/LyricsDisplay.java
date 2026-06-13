@@ -36,6 +36,10 @@ public final class LyricsDisplay {
     // 预缓存
     private static volatile List<LrcLine> pendingLines;
     private static volatile String pendingSongName;
+    private static volatile long pendingTimestamp;     // 缓存时间戳，超时清除
+
+    /** 缓存过期时间（毫秒），默认 20 分钟 */
+    private static final long CACHE_TTL_MS = 20 * 60 * 1000;
 
     // 去重
     private static volatile String lastParseMsg;
@@ -71,6 +75,7 @@ public final class LyricsDisplay {
                 List<LrcLine> parsed = LyricsParser.parse(lrcText);
                 LOG.info("歌词已缓存: {} 行 (等待播放)", parsed.size());
                 pendingLines = parsed;
+                pendingTimestamp = System.currentTimeMillis();
             }
         }).exceptionally(ex -> {
             LOG.error("歌词获取异常: {}", ex.toString());
@@ -138,6 +143,7 @@ public final class LyricsDisplay {
         lines = null;
         pendingLines = null;
         pendingSongName = null;
+        pendingTimestamp = 0;
         songDisplayName = "";
         lastParseMsg = null;
         lastPlayMsg = null;
@@ -149,6 +155,14 @@ public final class LyricsDisplay {
     // ==================================================================
 
     public static void tick() {
+        // 定期清除过期预缓存（5 分钟未播放）
+        if (pendingLines != null && pendingTimestamp > 0 &&
+                System.currentTimeMillis() - pendingTimestamp > CACHE_TTL_MS) {
+            LOG.info("预缓存超时，清除");
+            pendingLines = null;
+            pendingTimestamp = 0;
+        }
+
         if (!active || lines == null) return;
         if (playing) {
             long now = System.nanoTime();

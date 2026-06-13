@@ -6,7 +6,8 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 /**
- * 歌词 HUD 配置界面。
+ * 歌词 HUD 配置界面（分页）。
+ * 第1页：歌词显示  |  第2页：歌单设置
  */
 public class LyricsConfigScreen extends Screen {
 
@@ -15,6 +16,7 @@ public class LyricsConfigScreen extends Screen {
     private static final int PAD = 25;
 
     private final Screen parent;
+    private int page; // 0=歌词 1=歌单
 
     public LyricsConfigScreen(Screen parent) {
         super(Component.literal("AllMusic Lyrics 配置"));
@@ -23,28 +25,39 @@ public class LyricsConfigScreen extends Screen {
 
     @Override
     protected void init() {
-        LyricsConfig cfg = LyricsConfig.get();
-        int cx = width / 2;
-        int y = 35;
+        clearWidgets();
+        if (page == 0) initLyricsPage();
+        else initPlaylistPage();
 
-        // ==== 歌词颜色 ====
+        // 底部分页按钮
+        int bx = width / 2 - 100;
+        int by = height - 30;
+        addRenderableWidget(Button.builder(
+                        Component.literal(page == 0 ? "下一页 →" : "← 上一页"), btn -> {
+                    page = page == 0 ? 1 : 0;
+                    init();
+                }).pos(bx, by).size(200, BTN_H).build());
+    }
+
+    private void initLyricsPage() {
+        LyricsConfig cfg = LyricsConfig.get();
+        int cx = width / 2, y = 30;
+
+        addRenderableWidget(CycleButton.onOffBuilder(cfg.showLyrics)
+                .create(cx - BTN_W / 2, y, BTN_W, BTN_H,
+                        Component.literal("显示歌词"),
+                        (btn, on) -> { cfg.showLyrics = on; LyricsConfig.save(); }));
+        y += PAD;
+
         addRenderableWidget(Button.builder(
                         Component.literal("歌词RGB: " + onOff(cfg.rgbMode)), btn -> {
                     cfg.rgbMode = !cfg.rgbMode;
                     btn.setMessage(Component.literal("歌词RGB: " + onOff(cfg.rgbMode)));
-                    LyricsConfig.save();
+                    LyricsConfig.save(); init();
                 }).pos(cx - BTN_W / 2, y).size(BTN_W, BTN_H).build());
         y += PAD;
 
-        if (!cfg.rgbMode) {
-            addRenderableWidget(Button.builder(
-                            Component.literal(presetName(cfg.textColor, "歌词")), btn -> {
-                        cfg.textColor = nextPreset(cfg.textColor);
-                        btn.setMessage(Component.literal(presetName(cfg.textColor, "歌词")));
-                        LyricsConfig.save();
-                    }).pos(cx - BTN_W / 2, y).size(BTN_W, BTN_H).build());
-            y += PAD;
-        } else {
+        if (cfg.rgbMode) {
             addRenderableWidget(Button.builder(
                             Component.literal("歌词RGB速度: " + cfg.rgbSpeed + "s"), btn -> {
                         cfg.rgbSpeed = cfg.rgbSpeed >= 6 ? 1 : cfg.rgbSpeed + 1;
@@ -54,24 +67,15 @@ public class LyricsConfigScreen extends Screen {
             y += PAD;
         }
 
-        // ==== 歌名颜色 ====
         addRenderableWidget(Button.builder(
                         Component.literal("歌名RGB: " + onOff(cfg.titleRgbMode)), btn -> {
                     cfg.titleRgbMode = !cfg.titleRgbMode;
                     btn.setMessage(Component.literal("歌名RGB: " + onOff(cfg.titleRgbMode)));
-                    LyricsConfig.save();
+                    LyricsConfig.save(); init();
                 }).pos(cx - BTN_W / 2, y).size(BTN_W, BTN_H).build());
         y += PAD;
 
-        if (!cfg.titleRgbMode) {
-            addRenderableWidget(Button.builder(
-                            Component.literal(presetName(cfg.titleColor, "歌名")), btn -> {
-                        cfg.titleColor = nextPreset(cfg.titleColor);
-                        btn.setMessage(Component.literal(presetName(cfg.titleColor, "歌名")));
-                        LyricsConfig.save();
-                    }).pos(cx - BTN_W / 2, y).size(BTN_W, BTN_H).build());
-            y += PAD;
-        } else {
+        if (cfg.titleRgbMode) {
             addRenderableWidget(Button.builder(
                             Component.literal("歌名RGB速度: " + cfg.titleRgbSpeed + "s"), btn -> {
                         cfg.titleRgbSpeed = cfg.titleRgbSpeed >= 8 ? 1 : cfg.titleRgbSpeed + 1;
@@ -81,7 +85,6 @@ public class LyricsConfigScreen extends Screen {
             y += PAD;
         }
 
-        // ==== 背景透明度 ====
         addRenderableWidget(Button.builder(
                         Component.literal(bgLabel(cfg.bgColor)), btn -> {
                     cfg.bgColor = nextBgAlpha(cfg.bgColor);
@@ -90,7 +93,6 @@ public class LyricsConfigScreen extends Screen {
                 }).pos(cx - BTN_W / 2, y).size(BTN_W, BTN_H).build());
         y += PAD;
 
-        // ==== 歌词宽度 ====
         addRenderableWidget(Button.builder(
                         Component.literal("歌词宽度: " + cfg.maxWidth), btn -> {
                     cfg.maxWidth = cfg.maxWidth >= 500 ? 200 : cfg.maxWidth + 60;
@@ -99,31 +101,41 @@ public class LyricsConfigScreen extends Screen {
                 }).pos(cx - BTN_W / 2, y).size(BTN_W, BTN_H).build());
         y += PAD;
 
-        // ==== 底部距离 ====
         addRenderableWidget(Button.builder(
                         Component.literal("底部距离: " + cfg.bottomOffset), btn -> {
                     cfg.bottomOffset = cfg.bottomOffset >= 140 ? 30 : cfg.bottomOffset + 10;
                     btn.setMessage(Component.literal("底部距离: " + cfg.bottomOffset));
                     LyricsConfig.save();
                 }).pos(cx - BTN_W / 2, y).size(BTN_W, BTN_H).build());
-        y += PAD;
+    }
 
-        // ==== 显示开关 + 完成 ====
-        y += 5;
-        addRenderableWidget(CycleButton.onOffBuilder(cfg.showLyrics)
-                .create(cx - BTN_W / 2, y, BTN_W, BTN_H,
-                        Component.literal("显示歌词"),
-                        (btn, on) -> { cfg.showLyrics = on; LyricsConfig.save(); }));
+    private void initPlaylistPage() {
+        LyricsConfig cfg = LyricsConfig.get();
+        int cx = width / 2, y = 30;
+
+        addRenderableWidget(Button.builder(
+                        Component.literal("每次发送: " + cfg.playlistSendCount + " 首"), btn -> {
+                    cfg.playlistSendCount = cfg.playlistSendCount >= 20 ? 1 : cfg.playlistSendCount + 1;
+                    btn.setMessage(Component.literal("每次发送: " + cfg.playlistSendCount + " 首"));
+                    LyricsConfig.save();
+                }).pos(cx - BTN_W / 2, y).size(BTN_W, BTN_H).build());
         y += PAD + 5;
 
-        addRenderableWidget(Button.builder(Component.literal("完成"), btn -> onClose())
-                .pos(cx - 50, y).size(100, BTN_H).build());
+        addRenderableWidget(new MultiLineTextWidget(
+                Component.literal(
+                        "§7使用 /musiclist <网易云歌单链接>\n" +
+                        "§7模组会自动获取歌单歌曲\n" +
+                        "§7并逐一发送 /music 指令点歌\n" +
+                        "§7剩余歌曲缓存在内存中"),
+                font).setMaxWidth(280).setCentered(true));
     }
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor ctx, int mouseX, int mouseY, float delta) {
         super.extractRenderState(ctx, mouseX, mouseY, delta);
-        ctx.centeredText(font, title, width / 2, 12, 0xFF_FFFFFF);
+        String t = page == 0 ? "歌词设置" : "歌单设置";
+        ctx.centeredText(font, Component.literal(t), width / 2, 10, 0xFF_AAAAAA);
+        ctx.centeredText(font, title, width / 2, -10, 0xFF_FFFFFF);
     }
 
     @Override
@@ -134,26 +146,6 @@ public class LyricsConfigScreen extends Screen {
     // ---- 工具 ----
 
     private static String onOff(boolean b) { return b ? "§a开" : "§c关"; }
-
-    private static final int[] PRESETS = {
-            0xFF_FFFFFF, 0xFF_55FFFF, 0xFF_55FF55,
-            0xFF_FFFF55, 0xFF_FF55FF, 0xFF_FF5555
-    };
-    private static final String[] PRESET_NAMES = {
-            "白色", "青色", "绿色", "黄色", "品红", "红"
-    };
-
-    private static String presetName(int color, String prefix) {
-        for (int i = 0; i < PRESETS.length; i++)
-            if (PRESETS[i] == color) return prefix + "颜色: " + PRESET_NAMES[i];
-        return prefix + "颜色: 自定义";
-    }
-
-    private static int nextPreset(int cur) {
-        for (int i = 0; i < PRESETS.length; i++)
-            if (PRESETS[i] == cur) return PRESETS[(i + 1) % PRESETS.length];
-        return PRESETS[0];
-    }
 
     private static String bgLabel(int color) {
         int a = (color >> 24) & 0xFF;
