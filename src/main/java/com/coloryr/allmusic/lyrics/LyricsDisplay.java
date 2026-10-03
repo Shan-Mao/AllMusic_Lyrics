@@ -83,6 +83,44 @@ public final class LyricsDisplay {
         });
     }
 
+    /**
+     * 来自前置模组 {@code MusicPack.INFO} 的歌曲信息（"歌名 | 歌手"），
+     * 不含"正在播放："前缀，因此不能走 {@link #onNowPlaying(String)} 的正则匹配。
+     * 由 {@link com.coloryr.allmusic.lyrics.mixin.AllMusicCoreMixin} 兜底调用。
+     */
+    public static void onSongInfo(String info) {
+        if (info == null || info.isBlank()) return;
+        String text = "正在播放：" + info;
+        if (text.equals(lastPlayMsg)) return;
+        lastPlayMsg = text;
+        LOG.info("packDo 歌曲信息: {}", info);
+        activate(info);
+    }
+
+    /**
+     * 前置模组 4.x 新增：服务器直接下发的 LRC 歌词，比本地搜索更精准。
+     * 优先级高于自行搜索的结果。
+     */
+    public static void onServerLyric(String lyric, String tlyric) {
+        if (lyric == null || lyric.isBlank()) return;
+        String text = lyric;
+        // 优先使用翻译歌词（若存在且可解析）
+        if (tlyric != null && !tlyric.isBlank()) {
+            List<LrcLine> tran = LyricsParser.parse(tlyric);
+            if (!tran.isEmpty()) text = tlyric;
+        }
+        List<LrcLine> parsed = LyricsParser.parse(text);
+        if (parsed.isEmpty()) return;
+
+        LOG.info("服务器下发歌词: {} 行", parsed.size());
+        lines = parsed;
+        pendingLines = null;
+        pendingTimestamp = 0;
+        active = true;
+        currentMs = 0;
+        lastTickNano = System.nanoTime();
+    }
+
     public static void onNowPlaying(String message) {
         if (message == null || message.isBlank()) return;
         if (message.equals(lastPlayMsg)) return;
@@ -94,31 +132,45 @@ public final class LyricsDisplay {
         String songName = m.group(1).trim();
         LOG.info("正在播放: {}", songName);
 
+        activate(songName);
+    }
+
+    /**
+     * 激活歌词显示：若有预缓存（"正在解析歌曲"阶段已取回）则直接使用，
+     * 否则按歌名走搜索后备链路。
+     *
+     * @param songName 歌名（可含 "| 歌手"）
+     */
+    private static void activate(String songName) {
+        songDisplayName = cleanName(songName);
+
         if (pendingLines != null && !pendingLines.isEmpty()) {
             lines = pendingLines;
             pendingLines = null;
+            pendingTimestamp = 0;
         } else {
             LOG.info("无缓存，用歌名搜索...");
-            LyricsFetcher.fetch(message).thenAccept(lrcText -> {
+            LyricsFetcher.fetch(songName).thenAccept(lrcText -> {
                 if (lrcText != null && !lrcText.isBlank()) {
                     List<LrcLine> parsed = LyricsParser.parse(lrcText);
                     if (!parsed.isEmpty()) {
                         lines = parsed;
-                        songDisplayName = cleanName(songName);
-                        active = true;
                         currentMs = 0;
                         lastTickNano = System.nanoTime();
+                        active = true;
                         LOG.info("歌词显示已激活: {}", songDisplayName);
                     }
                 }
-            }).exceptionally(ex -> null);
+            }).exceptionally(ex -> {
+                LOG.error("歌词搜索异常: {}", ex.toString());
+                return null;
+            });
             return;
         }
 
-        songDisplayName = cleanName(songName);
-        active = true;
         currentMs = 0;
         lastTickNano = System.nanoTime();
+        active = true;
         LOG.info("歌词显示已激活: {}", songDisplayName);
     }
 

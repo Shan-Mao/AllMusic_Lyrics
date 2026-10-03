@@ -94,7 +94,7 @@ public class LyricsConfigScreen extends Screen {
         var c = Component.literal(label + " | ").append(
                 Component.literal(hex).withColor(color & 0xFFFFFF));
         var b = Button.builder(c, btn -> {
-            if (minecraft != null) minecraft.setScreen(new ColorEditorScreen(this, key, title));
+            if (minecraft != null) minecraft.gui.setScreen(new ColorEditorScreen(this, key, title));
         }).pos(bx, y).size(BW, 20).build();
         b.active = active; addRenderableWidget(b);
     }
@@ -155,7 +155,13 @@ public class LyricsConfigScreen extends Screen {
         ctx.centeredText(font, Component.literal(ts[page]), width / 2, 12, 0xFFFFFFFF);
     }
 
-    @Override public void onClose() { waitingForKey = false; if (minecraft != null) minecraft.setScreen(parent); }
+    /** 统一的界面切换入口（26.2 起 setScreen 由 Minecraft 移到 Gui 上） */
+    public static void open(Screen target) {
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        if (mc != null) mc.gui.setScreen(target);
+    }
+
+    @Override public void onClose() { waitingForKey = false; open(parent); }
 
     // ================================================================
     //  Helpers

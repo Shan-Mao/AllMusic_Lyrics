@@ -2,16 +2,16 @@ package com.coloryr.allmusic.lyrics;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import org.apache.hc.client5.http.classic.methods.HttpGet;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
-import org.apache.hc.client5.http.impl.classic.HttpClients;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.URI;
 import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -25,6 +25,9 @@ import java.util.regex.Pattern;
  * - 网易云音乐 API（直接歌曲ID → 精准）
  * - 网易云搜索 API（歌名搜索 → 后备）
  * - LRCLIB API（国际后备）
+ *
+ * HTTP 层使用 JDK 内置 {@link java.net.http.HttpClient}，
+ * 不再依赖 Apache HttpClient5（26.2 起前置模组已将其重定位内嵌）。
  */
 public final class LyricsFetcher {
 
@@ -36,7 +39,7 @@ public final class LyricsFetcher {
                 return t;
             });
 
-    private static volatile CloseableHttpClient http;
+    private static volatile HttpClient http;
     private static volatile boolean shutdown;
 
     /** 网易云URL正则：https://music.163.com/song?id=xxxxx 或 /#/song?id=xxxxx */
@@ -49,20 +52,23 @@ public final class LyricsFetcher {
     private static final Pattern NOW_PLAYING = Pattern.compile(
             "正在播放[：:]\\s*(.+)");
 
+    private static final String UA =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
+
     private LyricsFetcher() {}
 
     public static void init() {
-        http = HttpClients.custom()
-                .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        http = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(15))
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .executor(POOL)
                 .build();
     }
 
     public static void shutdown() {
         shutdown = true;
         POOL.shutdownNow();
-        if (http != null) {
-            try { http.close(); } catch (Exception ignored) {}
-        }
+        http = null;
     }
 
     // ==================================================================
@@ -256,36 +262,43 @@ public final class LyricsFetcher {
     }
 
     // ==================================================================
-    //  HTTP 工具
+    //  HTTP 工具（JDK HttpClient）
     // ==================================================================
 
     private static String get(String url) {
-        if (shutdown) return null;
+        HttpClient client = http;
+        if (shutdown || client == null) return null;
         try {
-            HttpGet req = new HttpGet(url);
-            req.setHeader("User-Agent",
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-            req.setHeader("Referer", "https://music.163.com/");
-            req.setHeader("Cookie", "os=pc; osver=Microsoft-Windows-10; appver=2.9.7");
+            HttpRequest req = newRequest(url);
+            HttpResponse<String> resp = client.send(req,
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
 
-            try (CloseableHttpResponse resp = http.execute(req)) {
-                if (resp.getCode() == 429) {
-                    LOG.debug("被限速，等待2秒重试...");
-                    Thread.sleep(2000);
-                    try (CloseableHttpResponse retry = http.execute(req)) {
-                        if (retry.getCode() == 200)
-                            return EntityUtils.toString(retry.getEntity(), StandardCharsets.UTF_8);
-                    }
-                }
-                if (resp.getCode() == 200)
-                    return EntityUtils.toString(resp.getEntity(), StandardCharsets.UTF_8);
-                if (resp.getCode() != 404)
-                    LOG.debug("HTTP {} → {}", resp.getCode(), url);
+            if (resp.statusCode() == 429) {
+                LOG.debug("被限速，等待2秒重试...");
+                Thread.sleep(2000);
+                resp = client.send(req,
+                        HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             }
+
+            if (resp.statusCode() == 200) return resp.body();
+            if (resp.statusCode() != 404)
+                LOG.debug("HTTP {} → {}", resp.statusCode(), url);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         } catch (Exception e) {
             LOG.debug("HTTP请求失败: {}", e.toString());
         }
         return null;
+    }
+
+    private static HttpRequest newRequest(String url) {
+        return HttpRequest.newBuilder(URI.create(url))
+                .timeout(Duration.ofSeconds(20))
+                .header("User-Agent", UA)
+                .header("Referer", "https://music.163.com/")
+                .header("Cookie", "os=pc; osver=Microsoft-Windows-10; appver=2.9.7")
+                .GET()
+                .build();
     }
 
     // ==================================================================

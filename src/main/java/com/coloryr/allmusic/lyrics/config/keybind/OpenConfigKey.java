@@ -17,7 +17,7 @@ public final class OpenConfigKey {
 
     public static void tick() {
         Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null || mc.screen != null) {
+        if (mc.player == null || mc.gui.screen() != null) {
             wasDown = false;
             return;
         }
@@ -34,7 +34,7 @@ public final class OpenConfigKey {
         }
 
         if (allDown && !wasDown) {
-            mc.setScreen(new LyricsConfigScreen(null));
+            mc.gui.setScreen(new LyricsConfigScreen(null));
         }
         wasDown = allDown;
     }

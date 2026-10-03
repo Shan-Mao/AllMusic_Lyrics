@@ -1,1 +1,10 @@
 AllMusic_Lyrics.code-workspace
+build/
+.gradle/
+run/
+*.log
+tools/__pycache__/
+
+# 前置模组 jar（3.4MB 二进制，不入库）
+# 构建前需自行把 AllMusic Client 放进 libs/，详见 README「构建」一节
+libs/
