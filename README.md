@@ -20,16 +20,21 @@
 
 本模组是 [AllMusic Client](https://github.com/Coloryr/AllMusic_Client) 的附属模组，需要先安装：
 
-- **AllMusic Client** `>= 3.7.4`
-- **Minecraft** `26.1.x`
-- **Fabric Loader** `>= 0.18.3`
+- **AllMusic Client** `>= 4.1.8`
+- **Minecraft** `>= 26.2`
+- **Fabric Loader** `>= 0.19.3`
 - **Fabric API**
+- **Java** `>= 25`
+
+> ⚠️ 从 1.5.0 起本模组**仅支持 Minecraft 26.2 及以上**。
+> 26.2 将 HUD 渲染整体迁移到了新的 `Hud` 类，注入点与 26.1.x 不兼容。
+> 如需 26.1.x，请使用 1.4.0。
 
 ## 安装
 
-1. 下载 `AllMusic_Lyrics-1.0.0.jar`
+1. 下载 `AllMusic_Lyrics-1.5.0-fabric-26.2.jar`
 2. 放入 Minecraft 的 `mods/` 文件夹
-3. 确保 `mods/` 中已有 AllMusic Client
+3. 确保 `mods/` 中已有 AllMusic Client 4.1.8 及以上
 4. 启动游戏
 
 ## 使用方法
@@ -46,6 +51,20 @@
 4. 歌词自动同步滚动，歌曲结束后自动消失
 
 ## 歌词获取链路
+
+### 首选链路（服务器直发）
+
+前置模组 4.x 会通过 `LYRIC` 数据包直接下发 LRC 歌词，比本地搜索更精准：
+
+```
+服务器下发 MusicPack.LYRIC
+    │
+    │  含 lyric / tlyric，优先取翻译歌词
+    ▼
+LyricsParser.parse → lines → 激活 HUD 渲染
+```
+
+### 主链路（歌曲 ID 直取）
 
 ```
 玩家输入 /music <网易云链接>
@@ -86,12 +105,16 @@ https://music.163.com/api/song/lyric?id=123456  ← 直接获取 LRC 歌词
 
 ### 第三方路径（packDo 后备）
 
-如果聊天消息监听全部失败，通过 Mixin 注入 `AllMusicCore.packDo(INFO, songName)` 作为最后兜底：
+如果聊天消息监听全部失败，通过 Mixin 注入 `AllMusicCore.packDo(MusicPack)` 作为最后兜底：
 
 ```
-AllMusicCore.packDo(INFO, "歌名 | 歌手")
+AllMusicCore.packDo(MusicPack)
     │
-    └─ 同上搜索流程
+    ├─ INFO  → StringMusicPack.data（"歌名 | 歌手"）→ 激活 + 搜索流程
+    ├─ LYRIC → LyricMusicPack.lyric                 → 直接显示
+    ├─ PLAY  → 播放时钟启动
+    ├─ STOP  → 播放时钟暂停
+    └─ CLEAR → 清空全部状态
 ```
 
 ## 关键正则匹配
@@ -111,7 +134,39 @@ AllMusicCore.packDo(INFO, "歌名 | 歌手")
 [AllMusicLyrics] 歌词已缓存: 35 行 (等待播放)
 [AllMusicLyrics] 正在播放: 歌名 | 歌手
 [AllMusicLyrics] 歌词显示已激活: 歌名 | 歌手
+[AllMusicLyrics] 服务器下发歌词: 42 行
+[AllMusicLyrics] packDo 歌曲信息: 歌名 | 歌手
 ```
+
+## 构建
+
+```bash
+./gradlew build
+```
+
+需要 **JDK 25 及以上**（26.2 与 Loom 1.18 的硬性要求）。
+`gradle.properties` 中的 `org.gradle.java.home` 已指向本机 JDK；如路径不同请自行修改。
+
+构建前还需自备前置模组 jar（**未随仓库提供**，已被 `.gitignore` 排除）：
+
+```
+libs/[fabric-26.2]AllMusic_Client-4.1.8.jar
+```
+
+从 [AllMusic Client 发布页](https://modrinth.com/mod/allmusic_client)下载对应文件放入 `libs/` 即可，
+文件名需与 `build.gradle` 中的 `files('libs/...')` 一致。
+
+### Mixin 注入点校验
+
+```bash
+./gradlew verifyMixins
+```
+
+该任务会静态解析编译后的字节码，逐条确认每个 `@Mixin` 目标类与 `@Inject` 方法
+在 Minecraft 与前置模组中真实存在。26.x 这类破坏性 API 改动（HUD 迁移、
+`packDo` 签名变更）都会在此被提前发现，而不是等玩家启动时崩溃。
+
+需要本机有 `python`，或用 `-PpythonExe=<路径>` 指定解释器。
 
 ## 源码
 

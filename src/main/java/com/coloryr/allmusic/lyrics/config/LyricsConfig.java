@@ -51,6 +51,11 @@ public class LyricsConfig {
     /** 每次发送的歌曲数量 */
     public int playlistSendCount = 5;
 
+    // ---- 快捷键 ----
+
+    /** 打开设置的快捷键（GLFW 键码数组），默认 Z */
+    public int[] configKeys = {90};
+
     // ---- RGB 预设色板 ----
 
     public static final int[] RGB_PRESETS = {

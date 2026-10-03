@@ -5,7 +5,7 @@
   "client": [
     "AllMusicCoreMixin",
     "MinecraftMixin",
-    "GuiLyricsMixin"
+    "HudLyricsMixin"
   ],
   "injectors": {
     "defaultRequire": 1

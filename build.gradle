@@ -1,5 +1,5 @@
 plugins {
-    id 'net.fabricmc.fabric-loom' version '1.17.3'
+    id 'net.fabricmc.fabric-loom' version '1.18.2'
 }
 
 version = project.mod_version
@@ -18,25 +18,24 @@ repositories {
     maven {
         name = 'Terraformers'
         url = 'https://maven.terraformersmc.com/releases/'
-    }}
+    }
+}
 
 dependencies {
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
-    // Minecraft 26.1+ 无需 mappings — 官方已无混淆
+    // Minecraft 26.1+ 无需 mappings — 官方已无混淆（Loom 1.17+ 默认使用 Mojang 官方映射）
 
     implementation "net.fabricmc:fabric-loader:${project.loader_version}"
     implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
-    // AllMusic Client 依赖（本地文件）
-    implementation files('../[fabric-26.1]AllMusic_Client-3.7.4')
-
-    // AllMusic Client 内嵌的库
-    implementation files('../[fabric-26.1]AllMusic_Client-3.7.4/META-INF/jars/httpclient5-5.6.jar')
-    implementation files('../[fabric-26.1]AllMusic_Client-3.7.4/META-INF/jars/httpcore5-5.4.jar')
-    implementation files('../[fabric-26.1]AllMusic_Client-3.7.4/META-INF/jars/httpcore5-h2-5.4.jar')
+    // AllMusic Client 前置（随仓库内置的本地文件）。
+    // 4.1.8 起 HttpClient5 / httpcore5 已被重定位内嵌进该 jar，
+    // 因此不再需要额外的 META-INF/jars/*.jar 本地依赖；
+    // 本模组自身的 HTTP 层已改用 JDK 内置 java.net.http。
+    implementation files('libs/[fabric-26.2]AllMusic_Client-4.1.8.jar')
 
     // Mod Menu（可选配置界面）
-    compileOnly "com.terraformersmc:modmenu:18.0.0-beta.1"
+    compileOnly "com.terraformersmc:modmenu:20.0.3"
 }
 
 processResources {
@@ -62,8 +61,110 @@ java {
     withSourcesJar()
 }
 
+/**
+ * 产物命名: AllMusic_Lyrics-1.5.0-fabric-26.2.jar
+ *
+ * 格式为「模组名-版本号-加载器-MC版本」，与内置前置 jar 的命名风格一致
+ * （[fabric-26.2]AllMusic_Client-4.1.8.jar）。版本号取自 gradle.properties
+ * 的 mod_version，与 fabric.mod.json 里的 version 同源。
+ */
+def platformSuffix = "fabric-${project.minecraft_version}"
+def artifactBase = "${project.archives_base_name}-${project.version}-${platformSuffix}"
+
 jar {
+    archiveFileName = "${artifactBase}.jar"
+
     from("LICENSE") {
         rename { "${it}_${project.base.archivesName.get()}" }
     }
+}
+
+tasks.named('sourcesJar', Jar) {
+    archiveFileName = "${artifactBase}-sources.jar"
+}
+
+/**
+ * 校验 Mixin 注入点在目标 Minecraft / 前置模组中真实存在。
+ * 26.x 起 HUD 渲染从 Gui 迁到 Hud、packDo 签名变更等破坏性改动，
+ * 都会在这里被提前发现，而不是等玩家启动游戏时崩溃。
+ *
+ * 可用 -PpythonExe=<path> 指定 Python 解释器（默认 python）。
+ */
+abstract class VerifyMixinsTask extends DefaultTask {
+    @Inject
+    abstract ExecOperations getExecOps()
+
+    @InputFile
+    abstract RegularFileProperty getMixinJar()
+
+    /** 显式目标（前置模组等） */
+    @InputFiles
+    @Optional
+    abstract ConfigurableFileCollection getExplicitTargets()
+
+    /** Loom 缓存目录；其中的 Minecraft jar 在配置期尚不存在，需在执行期解析 */
+    @InputDirectory
+    @Optional
+    abstract DirectoryProperty getLoomCacheDir()
+
+    @InputFile
+    abstract RegularFileProperty getScript()
+
+    @TaskAction
+    void verify() {
+        def scriptFile = script.get().asFile
+        if (!scriptFile.exists()) {
+            logger.lifecycle("跳过 verifyMixins: 未找到 ${scriptFile}")
+            return
+        }
+
+        def targets = new LinkedHashSet<File>()
+        def cacheDir = loomCacheDir.getOrNull()?.asFile
+        if (cacheDir?.isDirectory()) {
+            // Loom 会产出多个合并 jar（含体积较大的 server/client 产物），
+            // 全部作为候选，校验器会逐个查找目标类。
+            cacheDir.listFiles()
+                    ?.findAll { it.isFile() && it.name.startsWith('minecraft-') && it.name.endsWith('.jar') }
+                    ?.sort { -it.length() }
+                    ?.each { targets << it }
+        }
+        explicitTargets.files.findAll { it.exists() }.each { targets << it }
+
+        if (targets.isEmpty()) {
+            logger.lifecycle("跳过 verifyMixins: 未找到可校验的目标 jar")
+            return
+        }
+
+        def py = project.findProperty('pythonExe') ?: 'python'
+        def cmd = [py, scriptFile.absolutePath, mixinJar.get().asFile.absolutePath] +
+                targets.collect { it.absolutePath }
+        def out = new ByteArrayOutputStream()
+        def result = execOps.exec {
+            commandLine cmd
+            environment 'PYTHONIOENCODING', 'utf-8'
+            standardOutput = out
+            errorOutput = out
+            ignoreExitValue = true
+        }
+        logger.lifecycle(out.toString('UTF-8'))
+        if (result.exitValue != 0) {
+            throw new GradleException("Mixin 注入点校验失败 (退出码 ${result.exitValue})")
+        }
+    }
+}
+
+tasks.register('verifyMixins', VerifyMixinsTask) {
+    group = 'verification'
+    description = '静态校验所有 @Mixin/@Inject 注入点在目标 jar 中确实存在'
+    dependsOn tasks.named('jar')
+
+    mixinJar.set(tasks.named('jar').flatMap { it.archiveFile })
+    script.set(file('tools/verify_mixins.py'))
+    explicitTargets.from(file('libs/[fabric-26.2]AllMusic_Client-4.1.8.jar'))
+    if (project.hasProperty('targetJar')) {
+        explicitTargets.from(file(project.property('targetJar')))
+    }
+    loomCacheDir.set(layout.dir(providers.provider {
+        new File(gradle.gradleUserHomeDir, "caches/fabric-loom/${project.minecraft_version}")
+    }))
 }

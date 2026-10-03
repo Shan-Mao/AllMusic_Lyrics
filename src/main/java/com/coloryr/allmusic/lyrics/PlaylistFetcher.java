@@ -3,15 +3,15 @@ package com.coloryr.allmusic.lyrics;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import org.apache.hc.client5.http.classic.methods.HttpGet;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
-import org.apache.hc.client5.http.impl.classic.HttpClients;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -26,6 +26,9 @@ import java.util.regex.Pattern;
  * 支持：
  *   https://music.163.com/playlist?id=123456
  *   https://music.163.com/#/playlist?id=123456
+ *
+ * HTTP 层使用 JDK 内置 {@link java.net.http.HttpClient}，
+ * 不再依赖 Apache HttpClient5（26.2 起前置模组已将其重定位内嵌）。
  */
 public final class PlaylistFetcher {
 
@@ -40,13 +43,21 @@ public final class PlaylistFetcher {
     private static final Pattern PLAYLIST_URL = Pattern.compile(
             "music\\.163\\.com.*playlist\\?id=(\\d+)");
 
-    private static volatile CloseableHttpClient http;
+    private static final String UA =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
+    private static final String COOKIE =
+            "os=pc; osver=Microsoft-Windows-10; appver=2.9.7; channel=netease; " +
+            "WEVNSM=1.0.0; WNMCID=zlpxumx.bf5n.4h22.bo3f.92agr.5da27";
+
+    private static volatile HttpClient http;
 
     private PlaylistFetcher() {}
 
     public static void init() {
-        http = HttpClients.custom()
-                .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        http = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(15))
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .executor(POOL)
                 .build();
     }
 
@@ -158,22 +169,49 @@ public final class PlaylistFetcher {
     }
 
     private static String httpGet(String url) {
+        return httpGet(url, 0);
+    }
+
+    private static String httpGet(String url, int retry) {
+        HttpClient client = http;
+        if (client == null) return null;
         try {
             LOG.info("HTTP GET: {}", url.substring(0, Math.min(60, url.length())));
-            HttpGet req = new HttpGet(url);
-            req.setHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-            req.setHeader("Referer", "https://music.163.com/");
-            req.setHeader("Cookie", "os=pc; osver=Microsoft-Windows-10; appver=2.9.7; channel=netease; WEVNSM=1.0.0; WNMCID=zlpxumx.bf5n.4h22.bo3f.92agr.5da27");
-            try (CloseableHttpResponse resp = http.execute(req)) {
-                int code = resp.getCode();
-                LOG.info("HTTP response: {}", code);
-                if (code == 429) { Thread.sleep(3000); return httpGet(url); }
-                if (code != 200) { LOG.warn("HTTP {} {}", code, url.substring(0, 50)); return null; }
-                String body = EntityUtils.toString(resp.getEntity(), StandardCharsets.UTF_8);
-                LOG.info("HTTP body length: {}", body.length());
-                return body;
+            HttpRequest req = HttpRequest.newBuilder(URI.create(url))
+                    .timeout(Duration.ofSeconds(20))
+                    .header("User-Agent", UA)
+                    .header("Referer", "https://music.163.com/")
+                    .header("Cookie", COOKIE)
+                    .GET()
+                    .build();
+
+            HttpResponse<String> resp = client.send(req,
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+
+            int code = resp.statusCode();
+            LOG.info("HTTP response: {}", code);
+            if (code == 429) {
+                if (retry >= 2) {
+                    LOG.warn("限速重试次数过多: {}", url.substring(0, 50));
+                    return null;
+                }
+                Thread.sleep(3000);
+                return httpGet(url, retry + 1);
             }
-        } catch (Exception e) { LOG.error("HTTP error: {}", e.toString()); return null; }
+            if (code != 200) {
+                LOG.warn("HTTP {} {}", code, url.substring(0, 50));
+                return null;
+            }
+            String body = resp.body();
+            LOG.info("HTTP body length: {}", body.length());
+            return body;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return null;
+        } catch (Exception e) {
+            LOG.error("HTTP error: {}", e.toString());
+            return null;
+        }
     }
 
     private static final java.util.concurrent.ScheduledExecutorService SENDER =
